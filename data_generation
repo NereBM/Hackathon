@@ -1,0 +1,276 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""
+Created on Wed Oct 16 12:56:33 2019
+
+@author: nereabejar
+"""
+
+import random
+import pandas as pd
+
+
+# Generate a randomised data set of Koodoo survival statistics
+
+data = {
+    'name': [],
+    'coordinate_x': [],
+    'coordinate_y': [],
+    'age': [],
+    'horns_length': [],
+    'height': [],
+    'weight': [],
+    'fur_color': []
+}
+ds = pd.DataFrame(data)
+
+for n in range(1000):
+ 
+    name = 'Kenny_' + str(n)
+    coordinate_x = random.randrange(0, 100, 1)
+    coordinate_y = random.randrange(0, 100, 1)
+    age = random.randrange(1, 10, 1)
+    horns_length = random.randrange(10, 40, 1)
+    height = random.randrange(120, 190, 1)
+    weight = random.randrange(175, 300, 1)
+    fur_color = 'Light Brown' if random.randrange(0, 2,
+                                                  1) == 1 else 'Dark Brown'
+
+    data_row = {
+        'name': [name],
+        'coordinate_x': [coordinate_x],
+        'coordinate_y': [coordinate_y],
+        'age': [age],
+        'horns_length': [horns_length],
+        'height': [height],
+        'weight': [weight],
+        'fur_color': [fur_color]
+    }
+
+    row = pd.DataFrame(data_row)
+    ds = ds.append(row, 'sort=False')
+
+print(ds)
+
+
+def DT_labels_creator(df):
+    hl_thres=30
+    age_thres=5
+    w_thres=250
+    for nam in df.name.unique():
+        if(df[df.name==nam]['coordinate_x'].iloc[0]<10):
+            if(df[df.name==nam]['horns_length'].iloc[0]<hl_thres):
+                lab='Died'
+            else:
+                lab='Survived'
+        elif(df[df.name==nam]['coordinate_x'].iloc[0]<35):
+            if((df[df.name==nam]['coordinate_y'].iloc[0]<20) | (df[df.name==nam]['coordinate_y'].iloc[0]>70)):
+                if(df[df.name==nam]['horns_length'].iloc[0]<hl_thres):
+                    lab='Died'
+                else:
+                    lab='Survived'
+            else:
+                lab='Survived'
+        elif(df[df.name==nam]['coordinate_x'].iloc[0]<55):
+            if(df[df.name==nam]['coordinate_y'].iloc[0]<20):
+                if(df[df.name==nam]['horns_length'].iloc[0]<hl_thres):
+                    lab='Died'
+                elif(df[df.name==nam]['age'].iloc[0]<age_thres):
+                    lab='Survived'
+                elif(df[df.name==nam]['fur_color'].iloc[0]=='Light Brown'):
+                    lab='Survived'
+                else:
+                    lab='Died'
+            else:
+                if(df[df.name==nam]['age'].iloc[0]<age_thres):
+                    lab='Survived'
+                else:
+                    lab='Died'
+        elif(df[df.name==nam]['coordinate_x'].iloc[0]<80):
+            if(df[df.name==nam]['coordinate_y'].iloc[0]<20):
+                if(df[df.name==nam]['weight'].iloc[0]>w_thres):
+                    lab='Died'
+                elif(df[df.name==nam]['age'].iloc[0]<age_thres):
+                    lab='Survived'
+                elif(df[df.name==nam]['fur_color'].iloc[0]=='Light Brown'):
+                    lab='Survived'
+                else:
+                    lab='Died'
+            elif(df[df.name==nam]['coordinate_y'].iloc[0]<60):
+                if(df[df.name==nam]['weight'].iloc[0]>w_thres):
+                    lab='Died'
+                elif(df[df.name==nam]['age'].iloc[0]<age_thres):
+                    lab='Survived'
+                else:
+                    lab='Died'
+            else:
+                lab='Died'
+        else:
+            if(df[df.name==nam]['coordinate_y'].iloc[0]<30):
+                if(df[df.name==nam]['fur_color'].iloc[0]=='Light Brown'):
+                    lab='Survived'
+                else:
+                    lab='Died'
+            elif(df[df.name==nam]['coordinate_y'].iloc[0]<60):
+                if(df[df.name==nam]['age'].iloc[0]<age_thres):
+                    lab='Survived'
+                else:
+                    lab='Died'
+            else:
+                lab='Died'
+        df.loc[df.name==nam,'fate']=lab
+        
+ds['fate'] = ""
+DT_labels_creator(ds)
+print(ds)
+
+
+ds.to_csv('Koodoo_survival_statistics.csv')
+
+##############              MODELS CREATION 
+
+ds = pd.read_csv('Koodoo_survival_statistics.csv')
+
+from sklearn.tree import DecisionTreeClassifier, export_graphviz
+from sklearn.model_selection import train_test_split #to easily split data in train and test
+from sklearn.model_selection import KFold
+from sklearn.metrics import accuracy_score
+from sklearn.metrics import f1_score
+from sklearn.metrics import precision_score
+from sklearn.metrics import recall_score
+import matplotlib.pyplot as plt
+import numpy as np
+
+#######---------- auxuliar functions --------------------
+def kfold_cross_validation(df,tree,folds_num,features,target):
+    kf = KFold(n_splits = folds_num, shuffle=True)
+    attributes = df[features]
+    labels = df[target]
+    accuracy= []
+    precision = []
+    recall = []
+    f1score =[]
+    #RMSE = []
+    scores= []
+    for i in range(folds_num):
+        result = next(kf.split(attributes), None)
+        x_train = attributes.iloc[result[0]]
+        x_test = attributes.iloc[result[1]]
+        y_train = labels.iloc[result[0]]
+        y_test = labels.iloc[result[1]]
+        model = tree.fit(x_train,y_train)
+        y_pred = tree.predict(x_test)
+        accuracy.append(accuracy_score(y_test, y_pred))
+        precision.append(precision_score(y_test, y_pred, average="weighted"))
+        recall.append(recall_score(y_test, y_pred, average="weighted"))
+        f1score.append(f1_score(y_test, y_pred, average="weighted"))
+    scores = [np.mean(accuracy),np.mean(precision), np.mean(recall),np.mean(f1score)]
+    return(scores)
+
+def DT_param_tunning_classification(df,features,target):
+    max_score = 0
+    score = 0
+    criterion = ["gini","entropy"]
+    splitter = ["best", "random"]
+    max_depth = [None,2,3,4,5,6,7,8,9,10]
+    min_samples_split = [2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,22,24,26,28,30]
+    min_samples_leaf = [1,2,3,4,5,6,7,8,9,10,11,12,13,14,16,18,20]
+    max_features = [None,"auto","sqrt","log2"]
+    for crit in criterion:
+        for split in splitter:
+            for depth in max_depth:
+                for min_split in min_samples_split:
+                    for min_leaf in min_samples_leaf:
+                        for feat in max_features:
+                            tree = DecisionTreeClassifier(criterion =crit ,splitter=split,max_depth=depth,min_samples_split=min_split,min_samples_leaf=min_leaf,max_features=feat)
+                            print("Criterion: "+str(crit)+", Splitter: "+str(split)+", max_depth: "+str(depth)+", min_samples_split: "+str(min_split)+", min_samples_leaf: "+str(min_leaf)+", max_features: "+str(feat))
+                            score = kfold_cross_validation(df,tree,10,features,target)
+                            #result="Criterion:,"+str(crit)+", Splitter:,"+str(split)+", max_depth:,"+str(depth)+", min_samples_split:,"+str(min_split)+", min_samples_leaf:,"+str(min_leaf)+", max_features:,"+str(feat)+",score:,"+str(score)+",\n"
+                            result="Criterion:,"+str(crit)+", Splitter:,"+str(split)+", max_depth:,"+str(depth)+", min_samples_split:,"+str(min_split)+", min_samples_leaf:,"+str(min_leaf)+", max_features:,"+str(feat)+",accuracy:,"+str(score[0])+",precision:,"+str(score[1])+",recall:,"+str(score[2])+",f1score:,"+str(score[3])+",\n"
+                            file1 = open("DTClass_ParamTunning.txt","a") #Append Only (‘a’) : Open the file for writing. The file is created if it does not exist. The handle is positioned at the end of the file. The data being written will be inserted at the end, after the existing data.
+                            file1.write(result)
+                            file1.close()
+                            #if(score>max_score):
+                            if(score[0]>max_score):#here we use accuracy, but we can change it for example to f1score using score[3]
+                                max_score=score[0]
+                                max_score_param = "Criterion: "+str(crit)+", Splitter: "+str(split)+", max_depth: "+str(depth)+", min_samples_split: "+str(min_split)+", min_samples_leaf: "+str(min_leaf)+", max_features: "+str(feat)
+    best = [max_score,max_score_param]
+    return(best)
+    
+#------------- Preparing the data ----------------
+    
+#Transforming categorical attributes:
+fate_to_num = {"fate":     {"Died": 0, "Survived": 1}}
+ds.replace(fate_to_num, inplace=True)
+fur_color_to_num = {"fur_color":     {"Light Brown": 1, "Dark Brown": 0}}
+ds.replace(fur_color_to_num, inplace=True)
+
+#defining features
+features = ['coordinate_x','coordinate_y','age','horns_length', 'height','weight','fur_color'] 
+
+#splitting data in training and test set
+ds_train, ds_test = train_test_split(ds, test_size=0.15)
+
+#parameter tunning
+best = DT_param_tunning_classification(ds,features,"fate")
+#[0.9729999999999999,
+#'Criterion: gini, Splitter: best, max_depth: None, min_samples_split: 5, min_samples_leaf: 1, max_features: None']
+
+#creating the final tree with the parameters obtained from parameter tunning
+tree_final = DecisionTreeClassifier(criterion = 'gini' ,splitter= 'best', max_depth=None, min_samples_split=5, min_samples_leaf=1,max_features=None)
+
+x_train = ds_train[features]
+y_train = ds_train["fate"]
+
+x_test = ds_test[features]
+y_test = ds_test["fate"]
+
+model = tree_final.fit(x_train, y_train) #training
+y_pred = tree_final.predict(x_test)
+print("Accuracy:")
+accuracy_score(y_test, y_pred)
+#0.94
+print("Precision:")
+precision_score(y_test, y_pred, average="weighted") #labels=np.unique(y_pred) can be added to calculate the measure only for the labels that have predicted samples
+#0.9398905866817582
+
+print("Recall:")
+recall_score(y_test, y_pred, average="weighted")
+#0.94
+
+print("F1-Score:")
+f1_score(y_test, y_pred, average="weighted")
+# 0.9399012925969447
+
+
+import pydotplus
+from scipy import misc
+import io
+
+def show_tree(tree, features, path):
+    f = io.StringIO() #This creates an object StringBuffer which is quite similar to
+    #a string but, while a string isa fixed-length, immutable character sequences and this is
+    #growable and writable character sequences. In this case the object is empty.
+    export_graphviz(tree, out_file = f, feature_names=features)
+    pydotplus.graph_from_dot_data(f.getvalue()).write_png(path)
+    img=misc.imread(path)
+    plt.rcParams["figure.figsize"]=(20,20)
+    plt.imshow(img)
+
+
+
+show_tree(tree_final, features,'dec_tree.png')
+
+import pickle
+
+pickle.dump(tree_final, open('CT_class_model.sav', 'wb'))
+
+# load the model from disk
+#tree_final = pickle.load(open(filename, 'rb')) 
+
+#parameters={'min_samples_split' : range(10,500,20),'max_depth': range(1,20,2)}
+#best = grid_search.GridSearchCV(clf_tree,parameters)
+#best =
+
+
+
